@@ -123,7 +123,8 @@ expire. The real profile is gitignored and may be injected as
    `python -m jobradar --help` works.
 2. The default path uses no paid service and requires no LLM or API key.
 3. Every eligible cold board is deterministically scheduled within seven days;
-   hot boards run twice daily and unhealthy boards back off without disappearing.
+   hot boards run on all four daily checks and unhealthy boards back off without
+   disappearing.
 4. Failure of one connector or malformed posting yields a partial-coverage
    digest; only a total pipeline failure suppresses it.
 5. Two source postings for the same opening create one job with both sources;
