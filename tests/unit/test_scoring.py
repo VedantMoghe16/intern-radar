@@ -32,3 +32,28 @@ def test_remote_us_only_role_is_not_treated_as_worldwide_remote() -> None:
     }
 
     assert filter_jobs([_job("Software Engineer Intern", "Remote - US only")], profile) == []
+
+
+def test_foreign_location_is_not_overridden_by_remote_description() -> None:
+    profile = {"locations": ["india", "remote"], "require_intern_signal": True}
+    job = _job("Technology Intern", "London, UK")
+    job.description = "The team supports remote collaboration and flexible work."
+
+    assert filter_jobs([job], profile) == []
+
+
+def test_new_grad_requires_explicit_profile_opt_in() -> None:
+    job = _job("Software Engineer, New Grad", "Remote")
+    strict = {"locations": ["india", "remote"], "require_intern_signal": True}
+    expanded = {**strict, "include_new_grad": True}
+
+    assert filter_jobs([job], strict) == []
+    assert filter_jobs([job], expanded) == [job]
+
+
+def test_us_focused_dataset_generic_remote_is_not_worldwide() -> None:
+    profile = {"locations": ["india", "remote"], "require_intern_signal": True}
+    job = _job("Cybersecurity Intern", "Remote")
+    job.ats = "dreamwork"
+
+    assert filter_jobs([job], profile) == []

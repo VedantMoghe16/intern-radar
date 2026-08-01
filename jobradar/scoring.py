@@ -54,12 +54,13 @@ def filter_jobs(jobs: Iterable[Job], cfg: dict) -> list[Job]:
     require_intern = cfg.get("require_intern_signal", True)
     drop_senior = cfg.get("drop_senior_titles", True)
 
-    intern_signal = re.compile(
-        r"\b(intern|internship|co-?op|apprentice|trainee|new ?grad|"
-        r"graduate program|university|campus|student|summer 20\d\d|"
-        r"early career|apm|associate product manager)\b",
-        re.I,
+    intern_terms = (
+        r"intern|internship|co-?op|apprentice|trainee|university|campus|"
+        r"student|summer 20\d\d"
     )
+    if cfg.get("include_new_grad", False):
+        intern_terms += r"|new ?grad|graduate program|early career"
+    intern_signal = re.compile(rf"\b({intern_terms})\b", re.I)
     restricted_remote = re.compile(
         r"\b(remote|work from home)\b.{0,35}\b(us|u\.s\.|usa|canada|emea|uk|"
         r"united kingdom|europe)\s*(only|required|residents?|based)?\b|"
@@ -85,9 +86,16 @@ def filter_jobs(jobs: Iterable[Job], cfg: dict) -> list[Job]:
             # empty location is kept — many boards omit it, better a false
             # positive than a missed role
             if loc_l and not any(l in loc_l for l in locations):
-                if "remote" not in loc_l and "remote" not in blob[:400]:
-                    continue
-        if restricted_remote.search(f"{job.location} {job.description[:800]}"):
+                # An explicit foreign location is authoritative; incidental
+                # work-from-home wording in the description must not override it.
+                continue
+        restriction_text = f"{job.title} {job.location} {job.description[:800]}"
+        if restricted_remote.search(restriction_text):
+            if not re.search(r"\b(india|worldwide|anywhere|global)\b", blob, re.I):
+                continue
+        if job.ats in {"dreamwork", "arbeitnow"} and "remote" in blob:
+            # These feeds are region-focused. Generic "Remote" does not mean
+            # worldwide unless the record says so explicitly.
             if not re.search(r"\b(india|worldwide|anywhere|global)\b", blob, re.I):
                 continue
         kept.append(job)
