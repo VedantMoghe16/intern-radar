@@ -35,6 +35,17 @@ def _tokens(text: str) -> set[str]:
     return set(re.findall(r"[a-z0-9+#.]{2,}", text.lower()))
 
 
+def _title_is_excluded(title: str, excluded_terms: list[str]) -> bool:
+    if any(term in title for term in excluded_terms):
+        return True
+    # Treat the configured noun as its obvious recruiting-family variants.
+    if "recruiter" in excluded_terms and re.search(
+        r"\brecruit(?:er|ers|ing|ment|ment coordinator)\b", title, re.I
+    ):
+        return True
+    return False
+
+
 def filter_jobs(jobs: Iterable[Job], cfg: dict) -> list[Job]:
     """Apply hard include/exclude rules from profile.yaml."""
     include = [k.lower() for k in cfg.get("title_include", [])]
@@ -61,7 +72,7 @@ def filter_jobs(jobs: Iterable[Job], cfg: dict) -> list[Job]:
         title_l = job.title.lower()
         blob = job.haystack
 
-        if exclude and any(k in title_l for k in exclude):
+        if exclude and _title_is_excluded(title_l, exclude):
             continue
         if drop_senior and SENIORITY_BLOCK.search(job.title):
             continue
