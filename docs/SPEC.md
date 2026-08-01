@@ -6,6 +6,11 @@ Intern Radar discovers public internship postings, prioritizes India-based and
 remote roles across all functions, and sends one concise daily email. The
 baseline must run without a paid API, a hand-maintained company list, or an LLM.
 
+The default profile is deliberately strict: only explicit internship or co-op
+titles qualify. Trainee, working-student, apprenticeship, new-grad, and generic
+early-career roles do not enter the digest. India roles and roles explicitly
+open worldwide qualify; an unqualified "remote" label does not.
+
 Common Crawl is a candidate-discovery source, not a source of truth. Every ATS
 board is live-probed before entering the registry, and board health is tracked
 independently from relevance. A failure in discovery, one connector, or one
@@ -56,13 +61,16 @@ team, requisition, season, and intake signals used to avoid merging distinct
 openings. Every source URL remains attached to the cluster.
 
 Summer 2027 and May 2028 graduation signals are preferences, not hard filters.
-Undated internships and adjacent intake language remain eligible at a lower
-score. Unknown locations are retained with lower confidence rather than silently
-dropped.
+Undated internships remain eligible at a lower score. The strict delivery
+profile rejects empty locations and generic remote labels unless the posting
+explicitly says India, worldwide, anywhere, or global.
 
 ## Digest facets
 
-All four requested dimensions appear as layers in one digest:
+Internship timing is the primary grouping: explicit seasons and month ranges
+become headings such as `May-August 2027`; roles whose posting does not state
+dates are kept in a final `Dates unspecified` group. The four requested facets
+then appear as layers inside those groups:
 
 - **Function:** Product, Applied AI/ML, Software, Data/Analytics, Quant, Design,
   and Ops/Other section headings, assigned by deterministic rules in v1.

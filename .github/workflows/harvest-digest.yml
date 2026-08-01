@@ -92,15 +92,15 @@ jobs:
         if: github.event_name == 'schedule'
         run: >-
           python -m jobradar.cli run --mode daily --max-boards 250
-          --out out/index.html --print --email
+          --min-score 35 --out out/index.html --print --email
 
       - name: Manual harvest with email
         if: github.event_name == 'workflow_dispatch' && inputs.send_email
-        run: python -m jobradar.cli run --mode "${{ inputs.mode }}" --max-boards 250 --out out/index.html --print --email
+        run: python -m jobradar.cli run --mode "${{ inputs.mode }}" --max-boards 250 --min-score 35 --out out/index.html --print --email
 
       - name: Manual harvest without email
         if: github.event_name == 'workflow_dispatch' && !inputs.send_email
-        run: python -m jobradar.cli run --mode "${{ inputs.mode }}" --max-boards 250 --out out/index.html --print
+        run: python -m jobradar.cli run --mode "${{ inputs.mode }}" --max-boards 250 --min-score 35 --out out/index.html --print
 
       - name: Persist redacted SQLite state
         if: always() && hashFiles('data/state.sqlite') != ''

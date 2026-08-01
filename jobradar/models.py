@@ -115,6 +115,11 @@ class Job:
     score: float = 0.0
     reasons: list[str] = field(default_factory=list)
     first_seen_at: str | None = None
+    timeline_label: str = "Dates unspecified"
+    timeline_start_month: int | None = None
+    timeline_end_month: int | None = None
+    timeline_year: int | None = None
+    timeline_confidence: float = 0.0
 
     @property
     def uid(self) -> str:
@@ -173,6 +178,8 @@ class Job:
         self.function = normalize_text(self.function)
         self.company_tier = normalize_text(self.company_tier) or "Unknown"
         self.first_seen_at = normalize_text(self.first_seen_at) or None
+        self.timeline_label = normalize_text(self.timeline_label) or "Dates unspecified"
+        self.timeline_confidence = max(0.0, min(float(self.timeline_confidence), 1.0))
 
         raw_urls: list[object]
         if isinstance(self.source_urls, str):

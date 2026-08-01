@@ -14,6 +14,8 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .timeline import timeline_sort_key
+
 CSS = """
 :root{
   --bg:#10151C; --panel:#171E27; --rule:#232C38;
@@ -38,6 +40,7 @@ h1{
 }
 .meta b{color:var(--warm);font-weight:500}
 .section{margin:34px 0 2px;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--warm)}
+.timeline{margin:40px 0 4px;padding-bottom:8px;border-bottom:1px solid var(--rule);font-size:17px;color:var(--bright)}
 .top{margin:22px 0 30px;padding:18px 20px;background:var(--panel);border:1px solid var(--rule)}
 .top h2{margin:0 0 10px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--hot)}
 .top a{color:var(--bright);text-decoration:none}
@@ -132,6 +135,7 @@ def _render_row(row: dict, now: datetime) -> str:
         sub += f" &nbsp;/&nbsp; {escape(str(row['location']))}"
     if row.get("department"):
         sub += f" &nbsp;/&nbsp; {escape(str(row['department']))}"
+    sub += f"<br><span>Timeline: {escape(str(row.get('timeline_label') or 'Dates unspecified'))}</span>"
 
     reasons = str(row.get("reasons") or "")
     components = row.get("score_components")
@@ -182,19 +186,38 @@ def render_html(rows: list[dict], failures: list[dict], out: Path) -> Path:
                 f"<div><b>{float(row.get('score') or 0):.0f}</b> &nbsp;"
                 f"<a href='{html.escape(str(row.get('url') or '#'), quote=True)}'>"
                 f"{html.escape(str(row.get('title') or 'Untitled role'))}</a>"
-                f" &nbsp;·&nbsp; {html.escape(str(row.get('company') or 'Unknown'))}</div>"
+                f" &nbsp;·&nbsp; {html.escape(str(row.get('company') or 'Unknown'))}"
+                f" &nbsp;·&nbsp; {html.escape(str(row.get('timeline_label') or 'Dates unspecified'))}</div>"
             )
         parts.append("</div>")
 
-    grouped: dict[str, list[dict]] = defaultdict(list)
+    timelines: dict[str, list[dict]] = defaultdict(list)
     for row in rows:
-        section = str(row.get("function") or "Ops/Other")
-        grouped[section if section in FUNCTION_ORDER else "Ops/Other"].append(row)
-    for section in FUNCTION_ORDER:
-        if not grouped[section]:
-            continue
-        parts.append(f"<h2 class='section'>{html.escape(section)} · {len(grouped[section])}</h2>")
-        parts.extend(_render_row(row, now) for row in grouped[section])
+        timelines[str(row.get("timeline_label") or "Dates unspecified")].append(row)
+    ordered_timelines = sorted(
+        timelines,
+        key=lambda label: timeline_sort_key(
+            label,
+            timelines[label][0].get("timeline_year"),
+            timelines[label][0].get("timeline_start_month"),
+        ),
+    )
+    for timeline in ordered_timelines:
+        timeline_rows = timelines[timeline]
+        parts.append(
+            f"<h2 class='timeline'>{html.escape(timeline)} · {len(timeline_rows)}</h2>"
+        )
+        grouped: dict[str, list[dict]] = defaultdict(list)
+        for row in timeline_rows:
+            section = str(row.get("function") or "Ops/Other")
+            grouped[section if section in FUNCTION_ORDER else "Ops/Other"].append(row)
+        for section in FUNCTION_ORDER:
+            if not grouped[section]:
+                continue
+            parts.append(
+                f"<h3 class='section'>{html.escape(section)} · {len(grouped[section])}</h3>"
+            )
+            parts.extend(_render_row(row, now) for row in grouped[section])
 
     if failures:
         parts.append("<div class='fail'>Partial coverage — boards that did not respond:<br>")
@@ -214,16 +237,30 @@ def render_text(rows: list[dict]) -> str:
     if not rows:
         return "Job radar — no unnotified matching roles; check source coverage.\n"
     lines = [f"Job radar — {len(rows)} waiting for this digest\n" + "=" * 52]
-    for section in FUNCTION_ORDER:
-        section_rows = [r for r in rows if (r.get("function") or "Ops/Other") == section]
-        if not section_rows:
-            continue
-        lines.append(f"\n{section.upper()}")
-        for row in section_rows:
-            lines.append(
-                f"\n[{float(row.get('score') or 0):>3.0f}] {row['title']}\n"
-                f"      {row['company']} · {row.get('company_tier') or 'Unknown'} · "
-                f"{row.get('location') or 'location n/a'}\n"
-                f"      {row.get('url') or ''}"
-            )
+    timeline_labels = sorted(
+        {str(row.get("timeline_label") or "Dates unspecified") for row in rows},
+        key=lambda label: timeline_sort_key(
+            label,
+            next((r.get("timeline_year") for r in rows if (r.get("timeline_label") or "Dates unspecified") == label), None),
+            next((r.get("timeline_start_month") for r in rows if (r.get("timeline_label") or "Dates unspecified") == label), None),
+        ),
+    )
+    for timeline in timeline_labels:
+        lines.append(f"\n{timeline.upper()}\n" + "-" * 52)
+        for section in FUNCTION_ORDER:
+            section_rows = [
+                row for row in rows
+                if (row.get("timeline_label") or "Dates unspecified") == timeline
+                and (row.get("function") or "Ops/Other") == section
+            ]
+            if not section_rows:
+                continue
+            lines.append(f"\n{section.upper()}")
+            for row in section_rows:
+                lines.append(
+                    f"\n[{float(row.get('score') or 0):>3.0f}] {row['title']}\n"
+                    f"      {row['company']} · {row.get('company_tier') or 'Unknown'} · "
+                    f"{row.get('location') or 'location n/a'}\n"
+                    f"      {row.get('url') or ''}"
+                )
     return "\n".join(lines) + "\n"

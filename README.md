@@ -14,8 +14,8 @@ blocking the rest of the digest. The baseline uses no paid API or LLM.
   coverage, promotion, lifecycle state, and health backoff.
 - India/remote internship filters, deterministic function segmentation, and
   explainable local scoring.
-- HTML/plain-text digest with top picks, function sections, freshness, company
-  tier, and partial-coverage warnings.
+- HTML/plain-text digest with top picks, internship month/season buckets,
+  function sections, freshness, company tier, and partial-coverage warnings.
 - Optional generic SMTP delivery. Jobs are marked notified only after SMTP
   acceptance.
 - Serialized GitHub Actions runs with a dedicated durable `state` branch.

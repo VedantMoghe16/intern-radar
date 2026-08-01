@@ -57,3 +57,15 @@ def test_us_focused_dataset_generic_remote_is_not_worldwide() -> None:
     job.ats = "dreamwork"
 
     assert filter_jobs([job], profile) == []
+
+
+def test_strict_internship_mode_excludes_trainees_and_working_students() -> None:
+    profile = {
+        "locations": ["india", "remote"],
+        "require_intern_signal": True,
+        "strict_internships_only": True,
+    }
+
+    assert filter_jobs([_job("Graduate Apprentice Trainee")], profile) == []
+    assert filter_jobs([_job("Working Student, Product")], profile) == []
+    assert filter_jobs([_job("Product Management Intern")], profile)

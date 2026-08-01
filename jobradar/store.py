@@ -33,6 +33,11 @@ CREATE TABLE IF NOT EXISTS jobs (
     function_confidence REAL NOT NULL DEFAULT 0,
     company_tier        TEXT NOT NULL DEFAULT 'Unknown',
     score_components    TEXT NOT NULL DEFAULT '{}',
+    timeline_label      TEXT NOT NULL DEFAULT 'Dates unspecified',
+    timeline_start_month INTEGER,
+    timeline_end_month  INTEGER,
+    timeline_year       INTEGER,
+    timeline_confidence REAL NOT NULL DEFAULT 0,
     notified_epoch      INTEGER,
     status              TEXT NOT NULL DEFAULT 'new'
         CHECK (status IN ('new', 'applied', 'ignored', 'closed'))
@@ -95,7 +100,17 @@ class Store:
         }
         if "notified_epoch" not in columns:
             self.conn.execute("ALTER TABLE jobs ADD COLUMN notified_epoch INTEGER")
-        self.conn.execute("PRAGMA user_version = 1")
+        timeline_columns = {
+            "timeline_label": "TEXT NOT NULL DEFAULT 'Dates unspecified'",
+            "timeline_start_month": "INTEGER",
+            "timeline_end_month": "INTEGER",
+            "timeline_year": "INTEGER",
+            "timeline_confidence": "REAL NOT NULL DEFAULT 0",
+        }
+        for name, declaration in timeline_columns.items():
+            if name not in columns:
+                self.conn.execute(f"ALTER TABLE jobs ADD COLUMN {name} {declaration}")
+        self.conn.execute("PRAGMA user_version = 2")
         self.conn.commit()
 
     def __enter__(self) -> "Store":
@@ -125,8 +140,10 @@ class Store:
                            (uid, company, title, location, department, posted_at,
                             first_seen_epoch, last_seen_epoch, score, reasons,
                             function, function_confidence, company_tier,
-                            score_components)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            score_components, timeline_label,
+                            timeline_start_month, timeline_end_month,
+                            timeline_year, timeline_confidence)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             job.uid,
                             job.company,
@@ -142,6 +159,11 @@ class Store:
                             job.function_confidence,
                             job.company_tier,
                             components,
+                            job.timeline_label,
+                            job.timeline_start_month,
+                            job.timeline_end_month,
+                            job.timeline_year,
+                            job.timeline_confidence,
                         ),
                     )
                     if job.uid not in seen_in_batch:
@@ -154,7 +176,9 @@ class Store:
                            department = CASE WHEN ? != '' THEN ? ELSE department END,
                            posted_at = COALESCE(?, posted_at),
                            function = ?, function_confidence = ?, company_tier = ?,
-                           score_components = ?
+                           score_components = ?, timeline_label = ?,
+                           timeline_start_month = ?, timeline_end_month = ?,
+                           timeline_year = ?, timeline_confidence = ?
                            WHERE uid = ?""",
                         (
                             now,
@@ -167,6 +191,11 @@ class Store:
                             job.function_confidence,
                             job.company_tier,
                             components,
+                            job.timeline_label,
+                            job.timeline_start_month,
+                            job.timeline_end_month,
+                            job.timeline_year,
+                            job.timeline_confidence,
                             job.uid,
                         ),
                     )

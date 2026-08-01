@@ -21,6 +21,7 @@ from .segmentation import (
     company_tier,
     freshness_bucket,
 )
+from .timeline import extract_timeline
 
 # Titles that are never worth surfacing to a student, whatever else matches.
 SENIORITY_BLOCK = re.compile(
@@ -52,6 +53,7 @@ def filter_jobs(jobs: Iterable[Job], cfg: dict) -> list[Job]:
     exclude = [k.lower() for k in cfg.get("title_exclude", [])]
     locations = [l.lower() for l in cfg.get("locations", [])]
     require_intern = cfg.get("require_intern_signal", True)
+    strict_internships = cfg.get("strict_internships_only", False)
     drop_senior = cfg.get("drop_senior_titles", True)
 
     intern_terms = (
@@ -61,6 +63,7 @@ def filter_jobs(jobs: Iterable[Job], cfg: dict) -> list[Job]:
     if cfg.get("include_new_grad", False):
         intern_terms += r"|new ?grad|graduate program|early career"
     intern_signal = re.compile(rf"\b({intern_terms})\b", re.I)
+    strict_intern_signal = re.compile(r"\b(intern(?:ship)?s?|co-?ops?)\b", re.I)
     restricted_remote = re.compile(
         r"\b(remote|work from home)\b.{0,35}\b(us|u\.s\.|usa|canada|emea|uk|"
         r"united kingdom|europe)\s*(only|required|residents?|based)?\b|"
@@ -77,8 +80,11 @@ def filter_jobs(jobs: Iterable[Job], cfg: dict) -> list[Job]:
             continue
         if drop_senior and SENIORITY_BLOCK.search(job.title):
             continue
-        if require_intern and not intern_signal.search(f"{job.title} {job.department}"):
-            continue
+        early_career_text = f"{job.title} {job.department}"
+        if require_intern:
+            required_pattern = strict_intern_signal if strict_internships else intern_signal
+            if not required_pattern.search(early_career_text):
+                continue
         if include and not any(k in title_l for k in include):
             continue
         if locations:
@@ -89,6 +95,12 @@ def filter_jobs(jobs: Iterable[Job], cfg: dict) -> list[Job]:
                 # An explicit foreign location is authoritative; incidental
                 # work-from-home wording in the description must not override it.
                 continue
+            if not loc_l and not cfg.get("allow_unknown_location", True):
+                if not re.search(r"\b(india|worldwide|anywhere|global)\b", blob, re.I):
+                    continue
+            if "remote" in loc_l and not cfg.get("allow_ambiguous_remote", True):
+                if not re.search(r"\b(india|worldwide|anywhere|global)\b", blob, re.I):
+                    continue
         restriction_text = f"{job.title} {job.location} {job.description[:800]}"
         if restricted_remote.search(restriction_text):
             if not re.search(r"\b(india|worldwide|anywhere|global)\b", blob, re.I):
@@ -128,7 +140,20 @@ def score_local(jobs: Iterable[Job], profile: dict) -> list[Job]:
         elif re.search(r"\b(remote|worldwide|anywhere)\b", blob):
             location_score = 7.0
 
-        intake_score = 10.0 if "summer 2027" in blob else (6.0 if "2027" in blob else 2.0)
+        timeline = extract_timeline(job)
+        job.timeline_label = timeline.label
+        job.timeline_start_month = timeline.start_month
+        job.timeline_end_month = timeline.end_month
+        job.timeline_year = timeline.year
+        job.timeline_confidence = timeline.confidence
+        if timeline.year == 2027 and timeline.start_month in {5, 6, 7, 8}:
+            intake_score = 10.0
+        elif timeline.year == 2027:
+            intake_score = 7.0
+        elif timeline.year in {2026, 2028}:
+            intake_score = 3.0
+        else:
+            intake_score = 2.0
         fresh = freshness_bucket(job)
         freshness_score = {"new": 5.0, "recent": 2.5}.get(fresh, 0.0)
 
@@ -138,6 +163,9 @@ def score_local(jobs: Iterable[Job], profile: dict) -> list[Job]:
         job.company_tier = company_tier(
             job.company, known_tiers=profile.get("company_tiers") or {}
         )
+        company_score = {"Big Tech": 10.0, "Scaled": 7.0, "Startup": 4.0}.get(
+            job.company_tier, 0.0
+        )
         job.score_components = {
             "skills": round(skill_score, 1),
             "boosts": round(bonus_score, 1),
@@ -145,12 +173,17 @@ def score_local(jobs: Iterable[Job], profile: dict) -> list[Job]:
             "intake": intake_score,
             "freshness": freshness_score,
             "function": round(job.function_confidence * 5, 1),
+            "company": company_score,
         }
         job.score = round(min(sum(job.score_components.values()), 100.0), 1)
         job.reasons = (
             ([f"skills: {', '.join(hits[:6])}"] if hits else [])
             + ([f"boost: {', '.join(why[:4])}"] if why else [])
-            + [f"function: {job.function}", f"freshness: {fresh}"]
+            + [
+                f"function: {job.function}",
+                f"timeline: {job.timeline_label}",
+                f"freshness: {fresh}",
+            ]
         )
     return sorted(
         jobs,
