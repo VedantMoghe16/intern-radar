@@ -1,0 +1,60 @@
+# Seed boards imported into the generated registry on first run.
+#
+# IMPORTANT: run `python -m jobradar.cli doctor` before trusting this file.
+# Companies migrate between ATS vendors constantly, so treat every token
+# below as a starting guess, not gospel. `doctor` tells you which are live
+# and which need a five-second fix.
+#
+# Finding a token: open the company's careers page and look at the URL it
+# redirects to.
+#     boards.greenhouse.io/TOKEN        -> ats: greenhouse
+#     jobs.lever.co/TOKEN               -> ats: lever
+#     jobs.ashbyhq.com/TOKEN            -> ats: ashby
+#     jobs.smartrecruiters.com/TOKEN    -> ats: smartrecruiters
+#     apply.workable.com/TOKEN          -> ats: workable
+#     TOKEN.recruitee.com               -> ats: recruitee
+#
+# Adding a company costs one line. Add every firm you'd actually work for —
+# the marginal cost of polling one more board is about 200ms.
+
+companies:
+  # --- data & AI platforms -------------------------------------------
+  - { name: Databricks,    ats: greenhouse, token: databricks }
+  - { name: Anthropic,     ats: greenhouse, token: anthropic }
+  - { name: Scale AI,      ats: greenhouse, token: scaleai }
+  - { name: Weights&Biases, ats: greenhouse, token: weightsandbiases }
+  - { name: Hugging Face,  ats: lever,      token: huggingface }
+  - { name: LangChain,     ats: ashby,      token: langchain }
+
+  # --- India: AI-first ------------------------------------------------
+  - { name: Sarvam AI,     ats: lever,      token: sarvam }
+  - { name: Krutrim,       ats: lever,      token: krutrim }
+  - { name: Yellow.ai,     ats: lever,      token: yellow-ai }
+  - { name: Qure.ai,       ats: lever,      token: qure }
+  - { name: Fractal,       ats: smartrecruiters, token: Fractal }
+
+  # --- India: product companies ---------------------------------------
+  - { name: Razorpay,      ats: lever,      token: razorpay }
+  - { name: Zepto,         ats: lever,      token: zepto }
+  - { name: CRED,          ats: lever,      token: cred }
+  - { name: Groww,         ats: lever,      token: groww }
+  - { name: Meesho,        ats: lever,      token: meesho }
+  - { name: Postman,       ats: greenhouse, token: postman }
+  - { name: Sprinklr,      ats: greenhouse, token: sprinklr }
+  - { name: Zeta,          ats: lever,      token: zeta }
+  - { name: Innovaccer,    ats: lever,      token: innovaccer }
+  - { name: Hasura,        ats: lever,      token: hasura }
+  - { name: Chargebee,     ats: lever,      token: chargebee }
+  - { name: Browserstack,  ats: lever,      token: browserstack }
+
+  # --- global, hire in India or remote --------------------------------
+  - { name: Atlassian,     ats: lever,      token: atlassian }
+  - { name: Rippling,      ats: ashby,      token: rippling }
+  - { name: Ramp,          ats: ashby,      token: ramp }
+  - { name: Notion,        ats: greenhouse, token: notion }
+  - { name: Figma,         ats: greenhouse, token: figma }
+  - { name: Vercel,        ats: greenhouse, token: vercel }
+  - { name: Linear,        ats: ashby,      token: linear }
+  - { name: Stripe,        ats: greenhouse, token: stripe }
+  - { name: Airbnb,        ats: greenhouse, token: airbnb }
+  - { name: Palantir,      ats: lever,      token: palantir }

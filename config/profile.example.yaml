@@ -1,0 +1,32 @@
+# Copy to config/profile.yaml and tune locally. The real file is gitignored.
+summary: Undergraduate seeking India-based or worldwide-remote internships.
+
+skills:
+  - python
+  - sql
+  - product management
+  - machine learning
+
+boosts:
+  summer 2027: 14
+  applied ai: 12
+  product manager: 12
+  india: 10
+  remote: 6
+
+title_include: []
+title_exclude:
+  - account executive
+  - recruiter
+
+locations:
+  - india
+  - remote
+
+require_intern_signal: true
+drop_senior_titles: true
+
+# Unknown companies remain Unknown; hiring volume is never used as a proxy.
+company_tiers:
+  Google: Big Tech
+  Databricks: Scaled

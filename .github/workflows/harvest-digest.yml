@@ -1,0 +1,146 @@
+name: harvest and digest
+
+on:
+  schedule:
+    # GitHub schedules are UTC and best-effort. Morning targets ~08:00 IST;
+    # evening refreshes hot boards without sending a second daily email.
+    - cron: "17 2 * * *"
+    - cron: "47 12 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Boards to harvest
+        required: true
+        default: daily
+        type: choice
+        options:
+          - daily
+          - hot
+          - all
+      send_email:
+        description: Attempt SMTP delivery
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+# All state-branch writers are serialized to avoid SQLite push races.
+concurrency:
+  group: intern-radar-harvest
+  cancel-in-progress: false
+
+jobs:
+  radar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONUNBUFFERED: "1"
+      JOBRADAR_SMTP_HOST: ${{ secrets.JOBRADAR_SMTP_HOST }}
+      JOBRADAR_SMTP_PORT: ${{ secrets.JOBRADAR_SMTP_PORT }}
+      JOBRADAR_SMTP_USERNAME: ${{ secrets.JOBRADAR_SMTP_USERNAME }}
+      JOBRADAR_SMTP_PASSWORD: ${{ secrets.JOBRADAR_SMTP_PASSWORD }}
+      JOBRADAR_SMTP_SECURITY: ${{ secrets.JOBRADAR_SMTP_SECURITY }}
+      JOBRADAR_EMAIL_FROM: ${{ secrets.JOBRADAR_EMAIL_FROM }}
+      JOBRADAR_EMAIL_TO: ${{ secrets.JOBRADAR_EMAIL_TO }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Restore durable state branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data
+          if git ls-remote --exit-code --heads origin state >/dev/null 2>&1; then
+            git fetch --no-tags origin state:refs/remotes/origin/state
+            git show origin/state:state.sqlite > data/state.sqlite
+          fi
+
+      - name: Materialize optional private profile
+        env:
+          PROFILE_YAML_B64: ${{ secrets.PROFILE_YAML_B64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${PROFILE_YAML_B64}" ]]; then
+            mkdir -p config
+            printf '%s' "${PROFILE_YAML_B64}" | base64 --decode > config/profile.yaml
+            chmod 600 config/profile.yaml
+          elif [[ ! -f config/profile.yaml && -f profile.yaml ]]; then
+            mkdir -p config
+            cp profile.yaml config/profile.yaml
+          fi
+
+      - name: Test before harvesting
+        run: pytest -q
+
+      - name: Morning harvest and email
+        if: github.event_name == 'schedule' && github.event.schedule == '17 2 * * *'
+        run: python -m jobradar.cli run --mode daily --out out/index.html --print --email
+
+      - name: Evening hot-board harvest
+        if: github.event_name == 'schedule' && github.event.schedule == '47 12 * * *'
+        run: python -m jobradar.cli run --mode hot --out out/index.html --print
+
+      - name: Manual harvest with email
+        if: github.event_name == 'workflow_dispatch' && inputs.send_email
+        run: python -m jobradar.cli run --mode "${{ inputs.mode }}" --out out/index.html --print --email
+
+      - name: Manual harvest without email
+        if: github.event_name == 'workflow_dispatch' && !inputs.send_email
+        run: python -m jobradar.cli run --mode "${{ inputs.mode }}" --out out/index.html --print
+
+      - name: Persist redacted SQLite state
+        if: always() && hashFiles('data/state.sqlite') != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "intern-radar[bot]"
+          git config user.email "intern-radar[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin state >/dev/null 2>&1; then
+            git fetch --no-tags origin state:refs/remotes/origin/state
+          fi
+
+          state_index="${RUNNER_TEMP}/intern-radar-state-index"
+          rm -f "${state_index}"
+          export GIT_INDEX_FILE="${state_index}"
+          parent=""
+          if git rev-parse --verify origin/state >/dev/null 2>&1; then
+            parent="$(git rev-parse origin/state)"
+            git read-tree "${parent}"
+          else
+            git read-tree --empty
+          fi
+
+          blob="$(git hash-object -w data/state.sqlite)"
+          git update-index --add --cacheinfo 100644 "${blob}" state.sqlite
+          tree="$(git write-tree)"
+          if [[ -n "${parent}" ]]; then
+            commit="$(printf 'radar state: %s\n' "$(date -u +%FT%TZ)" | git commit-tree "${tree}" -p "${parent}")"
+          else
+            commit="$(printf 'radar state: %s\n' "$(date -u +%FT%TZ)" | git commit-tree "${tree}")"
+          fi
+          git push origin "${commit}:refs/heads/state"
+
+      - name: Upload digest and redacted run reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: intern-radar-${{ github.run_id }}
+          path: |
+            out/
+            data/run-report.json
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,0 +1,103 @@
+name: discover ATS boards
+
+on:
+  schedule:
+    - cron: "23 3 1 * *"
+  workflow_dispatch:
+    inputs:
+      index:
+        description: Common Crawl index ID; leave blank for the newest index
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: intern-radar-harvest
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+
+      - name: Restore durable registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data
+          if git ls-remote --exit-code --heads origin state >/dev/null 2>&1; then
+            git fetch --no-tags origin state:refs/remotes/origin/state
+            git show origin/state:state.sqlite > data/state.sqlite
+          fi
+
+      - name: Select current Common Crawl index
+        id: crawl
+        env:
+          REQUESTED_INDEX: ${{ inputs.index }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${REQUESTED_INDEX:-}" ]]; then
+            index="${REQUESTED_INDEX}"
+          else
+            index="$(python -c 'import json, urllib.request; print(json.load(urllib.request.urlopen("https://index.commoncrawl.org/collinfo.json", timeout=30))[0]["id"])')"
+          fi
+          echo "index=${index}" >> "${GITHUB_OUTPUT}"
+
+      - name: Discover registry candidates
+        run: >-
+          python -m jobradar discover
+          --index "${{ steps.crawl.outputs.index }}"
+          --out data/discovered-candidates.json
+
+      - name: Persist registry state
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "intern-radar[bot]"
+          git config user.email "intern-radar[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin state >/dev/null 2>&1; then
+            git fetch --no-tags origin state:refs/remotes/origin/state
+          fi
+          state_index="${RUNNER_TEMP}/intern-radar-state-index"
+          rm -f "${state_index}"
+          export GIT_INDEX_FILE="${state_index}"
+          parent=""
+          if git rev-parse --verify origin/state >/dev/null 2>&1; then
+            parent="$(git rev-parse origin/state)"
+            git read-tree "${parent}"
+          else
+            git read-tree --empty
+          fi
+          blob="$(git hash-object -w data/state.sqlite)"
+          git update-index --add --cacheinfo 100644 "${blob}" state.sqlite
+          tree="$(git write-tree)"
+          if [[ -n "${parent}" ]]; then
+            commit="$(printf 'radar discovery state: %s\n' "$(date -u +%FT%TZ)" | git commit-tree "${tree}" -p "${parent}")"
+          else
+            commit="$(printf 'radar discovery state: %s\n' "$(date -u +%FT%TZ)" | git commit-tree "${tree}")"
+          fi
+          git push origin "${commit}:refs/heads/state"
+
+      - name: Upload redacted candidate report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: discovery-${{ github.run_id }}
+          path: data/discovered-candidates.json
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "intern-radar"
+version = "0.1.0"
+description = "A free, self-healing internship discovery and email digest pipeline"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "PyYAML>=6.0.1,<7",
+  "requests>=2.31,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8,<9",
+]
+
+[project.scripts]
+intern-radar = "jobradar.cli:main"
+jobradar = "jobradar.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["jobradar*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+

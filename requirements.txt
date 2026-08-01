@@ -1,0 +1,7 @@
+# Runtime dependencies. `pip install -e .` is preferred for development.
+PyYAML>=6.0.1,<7
+requests>=2.31,<3
+
+# Test runner used by the GitHub Actions workflow.
+pytest>=8,<9
+

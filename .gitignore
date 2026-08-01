@@ -1,0 +1,27 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# The real profile may contain personal and eligibility information.
+config/profile.yaml
+
+# Runtime state and generated output are not committed in v1.
+data/*.db
+data/*.db-*
+data/*.sqlite
+data/*.sqlite-*
+data/*.json
+out/*
+!data/.gitkeep
+!out/.gitkeep
+
+.DS_Store
