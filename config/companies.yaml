@@ -23,6 +23,8 @@ companies:
   - { name: Remote OK, ats: remoteok, token: global }
   - { name: Himalayas, ats: himalayas, token: global }
   - { name: Jobicy, ats: jobicy, token: global }
+  - { name: Dreamwork Tech Internships, ats: dreamwork, token: "2027" }
+  - { name: Simplify Summer Internships, ats: simplify, token: "2027" }
 
   # --- data & AI platforms -------------------------------------------
   - { name: Databricks,    ats: greenhouse, token: databricks }

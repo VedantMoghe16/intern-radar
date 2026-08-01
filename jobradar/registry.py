@@ -41,7 +41,14 @@ CREATE INDEX IF NOT EXISTS idx_boards_due ON boards(tier, lifecycle, next_poll_e
 """
 
 VALID_LIFECYCLES = {"candidate", "verified", "active", "cooling", "dormant", "retired"}
-ALWAYS_HOT_PROVIDERS = {"arbeitnow", "remoteok", "himalayas", "jobicy"}
+ALWAYS_HOT_PROVIDERS = {
+    "arbeitnow",
+    "remoteok",
+    "himalayas",
+    "jobicy",
+    "dreamwork",
+    "simplify",
+}
 
 
 def _epoch() -> int:

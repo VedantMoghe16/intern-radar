@@ -8,7 +8,9 @@ import pytest
 
 from jobradar.discovery import (
     USER_AGENT,
+    candidates_from_text,
     discover_candidates,
+    discover_community_candidates,
     parse_board_url,
     serialize_candidates,
 )
@@ -158,3 +160,44 @@ def test_discovery_arguments_and_serialization_are_deterministic() -> None:
         ]
     )
     assert json.loads(serialized)[0] == {"provider": "ashby", "token": "alpha"}
+
+
+def test_candidates_from_public_repository_text_deduplicates_boards() -> None:
+    text = """
+    <a href="https://job-boards.greenhouse.io/acme/jobs/123?ref=list">one</a>
+    https://job-boards.greenhouse.io/ACME/jobs/456
+    https://jobs.ashbyhq.com/beta/role-id
+    https://example.com/not-an-ats
+    """
+
+    candidates = candidates_from_text(text)
+
+    assert [(item["provider"], item["token"].lower()) for item in candidates] == [
+        ("ashby", "beta"),
+        ("greenhouse", "acme"),
+    ]
+
+
+def test_community_discovery_isolates_failed_documents() -> None:
+    class Response:
+        def __init__(self, text: str, failed: bool = False):
+            self.text = text
+            self.failed = failed
+
+        def raise_for_status(self) -> None:
+            if self.failed:
+                raise RuntimeError("unavailable")
+
+    class Session:
+        def get(self, url: str, **_kwargs: object) -> Response:
+            if "failed" in url:
+                return Response("", failed=True)
+            return Response("https://jobs.lever.co/acme/role")
+
+    candidates = discover_community_candidates(
+        Session(), urls=["https://failed.test/readme", "https://good.test/readme"]
+    )
+
+    assert [(item["provider"], item["token"]) for item in candidates] == [
+        ("lever", "acme")
+    ]

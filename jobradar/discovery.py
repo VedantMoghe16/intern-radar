@@ -8,6 +8,7 @@ when and how politely to validate them against ATS APIs.
 from __future__ import annotations
 
 import json
+import html
 import logging
 import re
 from typing import Iterable, Mapping, Protocol
@@ -30,6 +31,12 @@ DEFAULT_PATTERNS: tuple[str, ...] = (
     "jobs.smartrecruiters.com/*",
     "apply.workable.com/*",
     "*.recruitee.com/*",
+)
+COMMUNITY_DATASET_URLS: tuple[str, ...] = (
+    "https://raw.githubusercontent.com/SimplifyJobs/Summer2027-Internships/dev/README.md",
+    "https://raw.githubusercontent.com/SimplifyJobs/Summer2027-Internships/dev/README-Off-Season.md",
+    "https://raw.githubusercontent.com/SimplifyJobs/Summer2027-Internships/dev/archived/README-2026.md",
+    "https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/README.md",
 )
 
 _TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
@@ -204,6 +211,40 @@ def parse_board_url(url: str) -> dict[str, str] | None:
         "company": "",
         "discovered_url": str(url).strip(),
     }
+
+
+def candidates_from_text(text: str) -> list[dict[str, str]]:
+    """Extract and deduplicate supported ATS board URLs from a public document."""
+    found: dict[tuple[str, str], dict[str, str]] = {}
+    for raw_url in re.findall(r'''https?://[^\s<>"')]+''', html.unescape(text)):
+        candidate = parse_board_url(raw_url.rstrip(".,;"))
+        if candidate is None:
+            continue
+        key = (candidate["provider"], candidate["token"].casefold())
+        found.setdefault(key, candidate)
+    return sorted(
+        found.values(), key=lambda item: (item["provider"], item["token"].casefold())
+    )
+
+
+def discover_community_candidates(
+    session,
+    urls: Iterable[str] = COMMUNITY_DATASET_URLS,
+) -> list[dict[str, str]]:
+    """Use maintained public internship lists as a reliable discovery fallback."""
+    found: dict[tuple[str, str], dict[str, str]] = {}
+    for url in urls:
+        try:
+            response = session.get(url, headers={"User-Agent": USER_AGENT}, timeout=30)
+            response.raise_for_status()
+            for candidate in candidates_from_text(response.text):
+                key = (candidate["provider"], candidate["token"].casefold())
+                found.setdefault(key, candidate)
+        except Exception as exc:  # noqa: BLE001 - one community source is optional
+            log.warning("Community discovery source %s failed: %s", url, exc)
+    return sorted(
+        found.values(), key=lambda item: (item["provider"], item["token"].casefold())
+    )
 
 
 def _response_payload(response: _Response) -> object:

@@ -8,9 +8,10 @@ a digest.
 from __future__ import annotations
 
 import logging
+import html as html_lib
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Iterable
 
 import requests
@@ -67,6 +68,12 @@ def _get(session: requests.Session, url: str, **kw):
     resp = session.get(url, timeout=TIMEOUT, headers=HEADERS, **kw)
     resp.raise_for_status()
     return resp.json()
+
+
+def _get_text(session: requests.Session, url: str, **kw) -> str:
+    resp = session.get(url, timeout=TIMEOUT, headers=HEADERS, **kw)
+    resp.raise_for_status()
+    return resp.text
 
 
 # --------------------------------------------------------------------------
@@ -317,6 +324,78 @@ def jobicy(session, _company: str, _token: str) -> list[Job]:
     return out
 
 
+def dreamwork(session, _company: str, _token: str) -> list[Job]:
+    """Fetch the public Tech Internships 2027 machine-readable dataset."""
+    data = _get(
+        session,
+        "https://raw.githubusercontent.com/dreamworkhq/Tech-Internships-2027/"
+        "main/data/listings.json",
+    )
+    out = []
+    for j in data.get("listings", []):
+        location = j.get("location", "") or ""
+        remote_type = str(j.get("remoteType") or "")
+        if remote_type.lower() == "remote" and "remote" not in location.lower():
+            location = f"Remote · {location}".strip(" ·")
+        out.append(
+            Job(
+                company=j.get("company", "") or "Unknown",
+                title=j.get("title", ""),
+                url=j.get("url", ""),
+                ats="dreamwork",
+                location=location,
+                department=str(j.get("aiRoleKind") or "").replace("_", " "),
+                posted_at=j.get("postedAt") or j.get("firstIndexedAt"),
+                external_id=str(j.get("id") or ""),
+            ).normalized()
+        )
+    return out
+
+
+def simplify(session, _company: str, _token: str) -> list[Job]:
+    """Parse the public Summer 2027 internship repository's generated tables."""
+    raw = _get_text(
+        session,
+        "https://raw.githubusercontent.com/SimplifyJobs/"
+        "Summer2027-Internships/dev/README.md",
+    )
+    out: list[Job] = []
+    last_company = ""
+    now = datetime.now(timezone.utc)
+    for row in re.findall(r"<tr[^>]*>(.*?)</tr>", raw, flags=re.I | re.S):
+        cells = re.findall(r"<td[^>]*>(.*?)</td>", row, flags=re.I | re.S)
+        if len(cells) < 5:
+            continue
+        company = _strip_html(cells[0])
+        if company in {"", "↳"}:
+            company = last_company
+        else:
+            last_company = company
+        title = _strip_html(cells[1])
+        location = _strip_html(cells[2])
+        links = re.findall(r"href=[\"']([^\"']+)", cells[3], flags=re.I)
+        if not company or not title or not links:
+            continue
+        url = html_lib.unescape(links[0])
+        age_match = re.search(r"(\d+)d", _strip_html(cells[4]), re.I)
+        posted_at = None
+        if age_match:
+            posted_at = (now - timedelta(days=int(age_match.group(1)))).isoformat(
+                timespec="seconds"
+            )
+        out.append(
+            Job(
+                company=company,
+                title=title,
+                url=url,
+                ats="simplify",
+                location=location,
+                posted_at=posted_at,
+            ).normalized()
+        )
+    return out
+
+
 REGISTRY: dict[str, Callable] = {
     "greenhouse": greenhouse,
     "lever": lever,
@@ -328,6 +407,8 @@ REGISTRY: dict[str, Callable] = {
     "remoteok": remoteok,
     "himalayas": himalayas,
     "jobicy": jobicy,
+    "dreamwork": dreamwork,
+    "simplify": simplify,
 }
 
 

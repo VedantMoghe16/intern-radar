@@ -14,11 +14,13 @@ from jobradar.fetchers import (
     arbeitnow,
     ashby,
     greenhouse,
+    dreamwork,
     himalayas,
     jobicy,
     lever,
     recruitee,
     remoteok,
+    simplify,
     smartrecruiters,
     workable,
 )
@@ -28,6 +30,7 @@ class FakeResponse:
     def __init__(self, payload: object, status_code: int = 200):
         self.payload = payload
         self.status_code = status_code
+        self.text = payload if isinstance(payload, str) else ""
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
@@ -362,3 +365,43 @@ def test_jobicy_mapping() -> None:
 
     assert (job.ats, job.location, job.department) == ("jobicy", "Anywhere", "Design")
     _assert_request(session, "https://jobicy.com/api/v2/remote-jobs?count=100")
+
+
+def test_dreamwork_dataset_mapping() -> None:
+    session = FakeSession(FakeResponse({"listings": [{
+        "id": "dream-1", "company": "Acme", "title": "AI Intern",
+        "url": "https://example.test/dream/1", "location": "India",
+        "remoteType": "remote", "aiRoleKind": "ai_explicit",
+        "firstIndexedAt": "2026-08-01T00:00:00Z",
+    }]}))
+
+    job = dreamwork(session, "Dreamwork", "2027")[0]
+
+    assert (job.ats, job.location, job.department) == (
+        "dreamwork", "Remote · India", "ai explicit"
+    )
+    _assert_request(
+        session,
+        "https://raw.githubusercontent.com/dreamworkhq/Tech-Internships-2027/"
+        "main/data/listings.json",
+    )
+
+
+def test_simplify_public_table_mapping() -> None:
+    readme = """
+    <table><tbody><tr>
+      <td><strong>Acme</strong></td><td>Software Engineer Intern</td>
+      <td>Remote - India</td>
+      <td><a href="https://jobs.example.test/acme/1?utm_source=GHList">Apply</a></td>
+      <td>2d</td>
+    </tr></tbody></table>
+    """
+    session = FakeSession(FakeResponse(readme))
+
+    job = simplify(session, "Simplify", "2027")[0]
+
+    assert (job.company, job.title, job.location) == (
+        "Acme", "Software Engineer Intern", "Remote - India"
+    )
+    assert job.url.startswith("https://jobs.example.test/acme/1")
+    assert job.posted_at is not None

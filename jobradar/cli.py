@@ -185,13 +185,24 @@ def cmd_stats(args) -> None:
 
 def cmd_discover(args) -> None:
     """Harvest unverified ATS board candidates from a Common Crawl index."""
-    from .discovery import discover_candidates, serialize_candidates
+    from .discovery import (
+        discover_candidates,
+        discover_community_candidates,
+        serialize_candidates,
+    )
 
     candidates = discover_candidates(
         args.index,
         patterns=args.pattern or None,
         page_size=args.page_size,
         max_pages_per_pattern=args.max_pages,
+    )
+    community = discover_community_candidates(requests.Session())
+    combined: dict[tuple[str, str], dict] = {}
+    for candidate in [*candidates, *community]:
+        combined[(candidate["provider"], candidate["token"].casefold())] = candidate
+    candidates = sorted(
+        combined.values(), key=lambda item: (item["provider"], item["token"].casefold())
     )
     with BoardRegistry(args.db) as registry:
         registry.add_candidates(candidates, source=f"common-crawl:{args.index}")
