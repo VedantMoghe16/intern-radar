@@ -167,3 +167,25 @@ def test_shard_for_day_normalizes_aware_datetime_to_utc() -> None:
     same_in_utc = instant_in_india.astimezone(timezone.utc)
 
     assert shard_for_day(instant_in_india) == shard_for_day(same_in_utc)
+
+
+def test_due_limit_bounds_bootstrap_batches(registry: BoardRegistry) -> None:
+    for index in range(10):
+        _add_board(registry, f"candidate-{index}")
+
+    selected = registry.due("all", limit=3)
+
+    assert len(selected) == 3
+    assert len({board.id for board in selected}) == 3
+    with pytest.raises(ValueError, match="limit must be positive"):
+        registry.due("all", limit=0)
+
+
+def test_public_aggregators_are_imported_as_hot(registry: BoardRegistry) -> None:
+    registry.add_candidates(
+        [{"name": "Remote OK", "ats": "remoteok", "token": "global"}]
+    )
+
+    board = registry.all()[0]
+    assert board.tier == "hot"
+    assert registry.due("hot")[0].provider == "remoteok"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 
 from jobradar import cli
 from jobradar.models import Job
@@ -184,3 +185,30 @@ def test_missing_smtp_does_not_mark_pending_job_notified(
         ).fetchone()[0]
         assert "artifact only" in run_error
 
+
+def test_email_is_skipped_when_no_new_roles(tmp_path, monkeypatch) -> None:
+    companies, profile = _write_config(
+        tmp_path,
+        [{"name": "Healthy Co", "ats": "greenhouse", "token": "healthy"}],
+    )
+    db = tmp_path / "state.sqlite"
+    out = tmp_path / "digest.html"
+    monkeypatch.setattr(cli, "fetch_all", lambda _entries: ([], []))
+
+    def unexpected_send(**_kwargs):
+        raise AssertionError("empty digests must not contact SMTP")
+
+    monkeypatch.setattr("jobradar.mailer.send_digest", unexpected_send)
+    cli.main(
+        _run_args(
+            db=db,
+            companies=companies,
+            profile=profile,
+            out=out,
+            email=True,
+        )
+    )
+
+    report = json.loads((tmp_path / "run-report.json").read_text())
+    assert report["pending_digest"] == 0
+    assert report["mail_status"] == "no-new-jobs"

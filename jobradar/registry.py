@@ -41,6 +41,7 @@ CREATE INDEX IF NOT EXISTS idx_boards_due ON boards(tier, lifecycle, next_poll_e
 """
 
 VALID_LIFECYCLES = {"candidate", "verified", "active", "cooling", "dormant", "retired"}
+ALWAYS_HOT_PROVIDERS = {"arbeitnow", "remoteok", "himalayas", "jobicy"}
 
 
 def _epoch() -> int:
@@ -115,13 +116,15 @@ class BoardRegistry:
                 if source != "seed":
                     days_until = (cold_shard(f"{provider}:{token}") - shard_for_day()) % 7
                     next_poll = now + days_until * 86400
+                tier = "hot" if provider in ALWAYS_HOT_PROVIDERS else "cold"
                 cur = self.conn.execute(
                     """INSERT INTO boards
-                       (provider, token, company, discovered_epoch, next_poll_epoch, source)
-                       VALUES (?, ?, ?, ?, ?, ?)
+                       (provider, token, company, tier, discovered_epoch, next_poll_epoch, source)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)
                        ON CONFLICT(provider, token) DO UPDATE SET
-                         company = CASE WHEN excluded.company != '' THEN excluded.company ELSE company END""",
-                    (provider, token, company, now, next_poll, source),
+                         company = CASE WHEN excluded.company != '' THEN excluded.company ELSE company END,
+                         tier = CASE WHEN excluded.tier = 'hot' THEN 'hot' ELSE tier END""",
+                    (provider, token, company, tier, now, next_poll, source),
                 )
                 changed += max(cur.rowcount, 0)
         return changed
@@ -130,9 +133,16 @@ class BoardRegistry:
         rows = self.conn.execute("SELECT * FROM boards ORDER BY provider, token").fetchall()
         return [Board.from_row(row) for row in rows]
 
-    def due(self, mode: str = "daily", now: int | None = None) -> list[Board]:
+    def due(
+        self,
+        mode: str = "daily",
+        now: int | None = None,
+        limit: int | None = None,
+    ) -> list[Board]:
         """Return hot boards every run and due cold boards for daily/all modes."""
         now = _epoch() if now is None else now
+        if limit is not None and limit < 1:
+            raise ValueError("limit must be positive")
         if mode == "hot":
             tier_clause = "tier = 'hot'"
         elif mode == "daily":
@@ -143,13 +153,16 @@ class BoardRegistry:
             raise ValueError(f"unknown harvest mode: {mode}")
 
         params: tuple[int, ...] = (now,) if "?" in tier_clause else ()
-        rows = self.conn.execute(
+        sql = (
             f"""SELECT * FROM boards
                 WHERE lifecycle != 'retired' AND {tier_clause}
                 ORDER BY CASE tier WHEN 'hot' THEN 0 ELSE 1 END,
-                         COALESCE(next_poll_epoch, 0), id""",
-            params,
-        ).fetchall()
+                         COALESCE(next_poll_epoch, 0), id"""
+        )
+        if limit is not None:
+            sql += " LIMIT ?"
+            params = (*params, limit)
+        rows = self.conn.execute(sql, params).fetchall()
         return [Board.from_row(row) for row in rows]
 
     def mark_probe(self, board_id: int, *, live: bool, company: str = "") -> None:

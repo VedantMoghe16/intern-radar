@@ -2,10 +2,12 @@ name: harvest and digest
 
 on:
   schedule:
-    # GitHub schedules are UTC and best-effort. Morning targets ~08:00 IST;
-    # evening refreshes hot boards without sending a second daily email.
+    # Four best-effort checks: roughly 08:00, 12:00, 16:00, and 20:00 IST.
+    # Email is attempted each time but skipped when there are no new matches.
     - cron: "17 2 * * *"
-    - cron: "47 12 * * *"
+    - cron: "17 6 * * *"
+    - cron: "17 10 * * *"
+    - cron: "17 14 * * *"
   workflow_dispatch:
     inputs:
       mode:
@@ -86,21 +88,19 @@ jobs:
       - name: Test before harvesting
         run: pytest -q
 
-      - name: Morning harvest and email
-        if: github.event_name == 'schedule' && github.event.schedule == '17 2 * * *'
-        run: python -m jobradar.cli run --mode daily --out out/index.html --print --email
-
-      - name: Evening hot-board harvest
-        if: github.event_name == 'schedule' && github.event.schedule == '47 12 * * *'
-        run: python -m jobradar.cli run --mode hot --out out/index.html --print
+      - name: Scheduled harvest and conditional email
+        if: github.event_name == 'schedule'
+        run: >-
+          python -m jobradar.cli run --mode daily --max-boards 250
+          --out out/index.html --print --email
 
       - name: Manual harvest with email
         if: github.event_name == 'workflow_dispatch' && inputs.send_email
-        run: python -m jobradar.cli run --mode "${{ inputs.mode }}" --out out/index.html --print --email
+        run: python -m jobradar.cli run --mode "${{ inputs.mode }}" --max-boards 250 --out out/index.html --print --email
 
       - name: Manual harvest without email
         if: github.event_name == 'workflow_dispatch' && !inputs.send_email
-        run: python -m jobradar.cli run --mode "${{ inputs.mode }}" --out out/index.html --print
+        run: python -m jobradar.cli run --mode "${{ inputs.mode }}" --max-boards 250 --out out/index.html --print
 
       - name: Persist redacted SQLite state
         if: always() && hashFiles('data/state.sqlite') != ''

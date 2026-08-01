@@ -9,8 +9,7 @@ blocking the rest of the digest. The baseline uses no paid API or LLM.
 
 - Installable `jobradar` package and offline pytest suite.
 - Stable job-cluster and source-posting identities.
-- Six public ATS connectors: Greenhouse, Lever, Ashby, SmartRecruiters,
-  Workable, and Recruitee.
+- Six public ATS connectors plus Arbeitnow, Remote OK, Himalayas, and Jobicy.
 - Generated SQLite board registry with hot/cold scheduling, seven-day cold
   coverage, promotion, lifecycle state, and health backoff.
 - India/remote internship filters, deterministic function segmentation, and
@@ -72,5 +71,5 @@ python -m jobradar mark <uid-prefix> applied|ignored|closed|new
 python -m jobradar stats
 ```
 
-GitHub's schedule is best-effort: the morning job targets 08:00 IST and sends
-the digest; the evening job refreshes hot boards without sending a second mail.
+GitHub's schedule is best-effort: it checks around 08:00, 12:00, 16:00, and
+20:00 IST. Each run emails only when new matching roles are pending.

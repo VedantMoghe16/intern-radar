@@ -18,6 +18,12 @@
 # the marginal cost of polling one more board is about 200ms.
 
 companies:
+  # --- free public aggregators; these stay hot ------------------------
+  - { name: Arbeitnow, ats: arbeitnow, token: global }
+  - { name: Remote OK, ats: remoteok, token: global }
+  - { name: Himalayas, ats: himalayas, token: global }
+  - { name: Jobicy, ats: jobicy, token: global }
+
   # --- data & AI platforms -------------------------------------------
   - { name: Databricks,    ats: greenhouse, token: databricks }
   - { name: Anthropic,     ats: greenhouse, token: anthropic }

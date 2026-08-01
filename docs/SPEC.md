@@ -17,12 +17,12 @@ that remains available.
 1. **Discovery, monthly:** query current Common Crawl indexes for supported ATS
    URL shapes, canonicalize candidates, probe public endpoints, and update board
    lifecycle and health fields. Seed configuration exists only for migration.
-2. **Harvest, twice daily:** poll hot boards every run. Poll one deterministic
-   seventh of cold boards on the morning run, using provider-specific lightweight
-   listing requests before fetching descriptions for plausible matches.
-3. **Digest, daily:** after the morning harvest, cluster, filter, score, render,
-   and optionally deliver an HTML/plain-text email around 08:00 IST. GitHub
-   Actions schedules are best-effort, so this time is a target rather than an SLA.
+2. **Harvest, four times daily:** poll hot boards every run and consume bounded
+   batches of due cold boards so a large discovered registry cannot overload ATS
+   hosts.
+3. **Digest, conditional:** after each harvest, cluster, filter, score, and send
+   only when new matching roles are pending. Target checks are around 08:00,
+   12:00, 16:00, and 20:00 IST; GitHub schedules are best-effort.
 
 ## Board scheduling
 

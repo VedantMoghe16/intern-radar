@@ -54,6 +54,15 @@ def _ms_to_iso(ms) -> str | None:
         return None
 
 
+def _seconds_to_iso(seconds) -> str | None:
+    try:
+        return datetime.fromtimestamp(int(seconds), tz=timezone.utc).isoformat(
+            timespec="seconds"
+        )
+    except (TypeError, ValueError, OSError):
+        return None
+
+
 def _get(session: requests.Session, url: str, **kw):
     resp = session.get(url, timeout=TIMEOUT, headers=HEADERS, **kw)
     resp.raise_for_status()
@@ -215,6 +224,99 @@ def recruitee(session, company: str, token: str) -> list[Job]:
     return out
 
 
+def arbeitnow(session, _company: str, _token: str) -> list[Job]:
+    """Fetch the current public Arbeitnow remote-job page."""
+    data = _get(session, "https://www.arbeitnow.com/api/job-board-api")
+    out = []
+    for j in data.get("data", []):
+        location = str(j.get("location") or "")
+        if j.get("remote") and "remote" not in location.lower():
+            location = f"Remote · {location}".strip(" ·")
+        out.append(
+            Job(
+                company=j.get("company_name", "") or "Unknown",
+                title=j.get("title", ""),
+                url=j.get("url", ""),
+                ats="arbeitnow",
+                location=location,
+                department=", ".join(j.get("tags") or []),
+                description=_strip_html(j.get("description", "")),
+                posted_at=_seconds_to_iso(j.get("created_at")),
+                external_id=str(j.get("slug") or j.get("id") or ""),
+            ).normalized()
+        )
+    return out
+
+
+def remoteok(session, _company: str, _token: str) -> list[Job]:
+    """Fetch Remote OK's public JSON feed, ignoring its metadata first row."""
+    data = _get(session, "https://remoteok.com/api")
+    out = []
+    for j in data if isinstance(data, list) else []:
+        if not isinstance(j, dict) or not (j.get("position") or j.get("title")):
+            continue
+        posted = j.get("date") or _seconds_to_iso(j.get("epoch"))
+        out.append(
+            Job(
+                company=j.get("company", "") or "Unknown",
+                title=j.get("position", "") or j.get("title", ""),
+                url=j.get("url", "") or j.get("apply_url", ""),
+                ats="remoteok",
+                location=j.get("location", "") or "Remote",
+                department=", ".join(j.get("tags") or []),
+                description=_strip_html(j.get("description", "")),
+                posted_at=str(posted) if posted else None,
+                external_id=str(j.get("id") or j.get("slug") or ""),
+            ).normalized()
+        )
+    return out
+
+
+def himalayas(session, _company: str, _token: str) -> list[Job]:
+    """Fetch a bounded page from Himalayas' public remote-jobs API."""
+    data = _get(session, "https://himalayas.app/jobs/api?limit=100&offset=0")
+    out = []
+    for j in data.get("jobs", []):
+        restrictions = j.get("locationRestrictions") or j.get("location_restrictions") or []
+        if isinstance(restrictions, str):
+            restrictions = [restrictions]
+        out.append(
+            Job(
+                company=j.get("companyName", "") or j.get("company", "") or "Unknown",
+                title=j.get("title", ""),
+                url=j.get("applicationLink", "") or j.get("url", ""),
+                ats="himalayas",
+                location=", ".join(str(value) for value in restrictions) or "Remote",
+                department=", ".join(j.get("categories") or []),
+                description=_strip_html(j.get("description", "")),
+                posted_at=j.get("pubDate") or j.get("publishedAt"),
+                external_id=str(j.get("guid") or j.get("id") or ""),
+            ).normalized()
+        )
+    return out
+
+
+def jobicy(session, _company: str, _token: str) -> list[Job]:
+    """Fetch a bounded page from Jobicy's public remote-job API."""
+    data = _get(session, "https://jobicy.com/api/v2/remote-jobs?count=100")
+    out = []
+    for j in data.get("jobs", []):
+        out.append(
+            Job(
+                company=j.get("companyName", "") or "Unknown",
+                title=j.get("jobTitle", "") or j.get("title", ""),
+                url=j.get("url", "") or j.get("jobUrl", ""),
+                ats="jobicy",
+                location=j.get("jobGeo", "") or "Remote",
+                department=j.get("jobIndustry", "") or j.get("jobType", "") or "",
+                description=_strip_html(j.get("jobDescription", "")),
+                posted_at=j.get("pubDate"),
+                external_id=str(j.get("id") or j.get("jobSlug") or ""),
+            ).normalized()
+        )
+    return out
+
+
 REGISTRY: dict[str, Callable] = {
     "greenhouse": greenhouse,
     "lever": lever,
@@ -222,6 +324,10 @@ REGISTRY: dict[str, Callable] = {
     "smartrecruiters": smartrecruiters,
     "workable": workable,
     "recruitee": recruitee,
+    "arbeitnow": arbeitnow,
+    "remoteok": remoteok,
+    "himalayas": himalayas,
+    "jobicy": jobicy,
 }
 
 

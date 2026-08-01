@@ -1,4 +1,4 @@
-"""Offline contract tests for the six structured ATS connectors."""
+"""Offline contract tests for structured ATS and aggregator connectors."""
 
 from __future__ import annotations
 
@@ -11,10 +11,14 @@ from jobradar.fetchers import (
     HEADERS,
     TIMEOUT,
     _strip_html,
+    arbeitnow,
     ashby,
     greenhouse,
+    himalayas,
+    jobicy,
     lever,
     recruitee,
+    remoteok,
     smartrecruiters,
     workable,
 )
@@ -302,3 +306,59 @@ def test_cross_source_mappings_share_cluster_but_keep_source_identity() -> None:
     assert greenhouse_job.source_uid != lever_job.source_uid
     assert greenhouse_job.source_urls == [greenhouse_job.url]
     assert lever_job.source_urls == [lever_job.url]
+
+
+def test_arbeitnow_mapping() -> None:
+    session = FakeSession(FakeResponse({"data": [{
+        "slug": "intern-1", "company_name": "Acme", "title": "AI Intern",
+        "url": "https://example.test/arbeitnow/1", "location": "India",
+        "remote": True, "tags": ["AI"], "description": "Build <b>agents</b>",
+        "created_at": 0,
+    }]}))
+
+    job = arbeitnow(session, "Arbeitnow", "global")[0]
+
+    assert (job.company, job.ats, job.external_id) == ("Acme", "arbeitnow", "intern-1")
+    assert job.location == "Remote · India"
+    _assert_request(session, "https://www.arbeitnow.com/api/job-board-api")
+
+
+def test_remoteok_mapping_ignores_metadata_row() -> None:
+    session = FakeSession(FakeResponse([
+        {"legal": "metadata"},
+        {"id": "remote-1", "company": "Acme", "position": "Product Intern",
+         "url": "https://example.test/remote/1", "description": "Own products"},
+    ]))
+
+    jobs = remoteok(session, "Remote OK", "global")
+
+    assert len(jobs) == 1
+    assert (jobs[0].company, jobs[0].location) == ("Acme", "Remote")
+    _assert_request(session, "https://remoteok.com/api")
+
+
+def test_himalayas_mapping() -> None:
+    session = FakeSession(FakeResponse({"jobs": [{
+        "guid": "him-1", "companyName": "Acme", "title": "Data Intern",
+        "applicationLink": "https://example.test/himalayas/1",
+        "locationRestrictions": ["India"], "categories": ["Data"],
+        "description": "Analyze <b>data</b>", "pubDate": "2026-08-01T00:00:00Z",
+    }]}))
+
+    job = himalayas(session, "Himalayas", "global")[0]
+
+    assert (job.ats, job.location, job.department) == ("himalayas", "India", "Data")
+    _assert_request(session, "https://himalayas.app/jobs/api?limit=100&offset=0")
+
+
+def test_jobicy_mapping() -> None:
+    session = FakeSession(FakeResponse({"jobs": [{
+        "id": "jobicy-1", "companyName": "Acme", "jobTitle": "Design Intern",
+        "url": "https://example.test/jobicy/1", "jobGeo": "Anywhere",
+        "jobIndustry": "Design", "jobDescription": "Design <b>flows</b>",
+    }]}))
+
+    job = jobicy(session, "Jobicy", "global")[0]
+
+    assert (job.ats, job.location, job.department) == ("jobicy", "Anywhere", "Design")
+    _assert_request(session, "https://jobicy.com/api/v2/remote-jobs?count=100")

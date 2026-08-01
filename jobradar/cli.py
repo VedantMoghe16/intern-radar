@@ -67,7 +67,7 @@ def cmd_run(args) -> None:
 
     with BoardRegistry(args.db) as registry:
         registry.add_candidates(seeds, source="seed")
-        boards = registry.due(mode=args.mode)
+        boards = registry.due(mode=args.mode, limit=args.max_boards)
 
         entries = [
             {"name": board.company or board.token, "ats": board.provider, "token": board.token}
@@ -109,7 +109,7 @@ def cmd_run(args) -> None:
 
         mail_error = None
         mail_status = "not-requested"
-        if args.email:
+        if args.email and rows:
             from .mailer import MailDeliveryError, send_digest
 
             try:
@@ -132,6 +132,9 @@ def cmd_run(args) -> None:
                 mail_status = "failed"
                 mail_error = str(exc)
                 print(f"Email not sent: {mail_error}")
+        elif args.email:
+            mail_status = "no-new-jobs"
+            print("Email skipped: no new matching roles")
 
         store.finish_run(
             run_id,
@@ -213,6 +216,12 @@ def main(argv=None) -> None:
     r.add_argument("--report", help="redacted JSON run report path")
     r.add_argument("--min-score", type=float, default=0.0)
     r.add_argument("--mode", choices=["hot", "daily", "all"], default="daily")
+    r.add_argument(
+        "--max-boards",
+        type=int,
+        default=250,
+        help="bound one run while the discovered registry bootstraps",
+    )
     r.add_argument("--companies", help="override seed companies YAML path")
     r.add_argument("--profile", help="override profile YAML path")
     r.add_argument("--email", action="store_true", help="send through configured SMTP")
