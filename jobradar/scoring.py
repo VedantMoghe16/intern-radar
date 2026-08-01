@@ -89,6 +89,12 @@ def filter_jobs(jobs: Iterable[Job], cfg: dict) -> list[Job]:
             continue
         if locations:
             loc_l = (job.location or "").lower()
+            eligible_location = re.search(
+                r"\b(india|bengaluru|bangalore|mumbai|hyderabad|delhi|"
+                r"gurgaon|gurugram|pune|noida|chennai|worldwide|anywhere|global)\b",
+                loc_l,
+                re.I,
+            )
             # empty location is kept — many boards omit it, better a false
             # positive than a missed role
             if loc_l and not any(l in loc_l for l in locations):
@@ -99,7 +105,19 @@ def filter_jobs(jobs: Iterable[Job], cfg: dict) -> list[Job]:
                 if not re.search(r"\b(india|worldwide|anywhere|global)\b", blob, re.I):
                     continue
             if "remote" in loc_l and not cfg.get("allow_ambiguous_remote", True):
-                if not re.search(r"\b(india|worldwide|anywhere|global)\b", blob, re.I):
+                # An explicit qualifier such as "Remote, USA" wins even if
+                # the description happens to mention a global team.
+                remote_qualifier = re.sub(
+                    r"\b(remote|work from home|hybrid)\b|[\s,;/()\[\]\-]",
+                    "",
+                    loc_l,
+                    flags=re.I,
+                )
+                if remote_qualifier and not eligible_location:
+                    continue
+                if not eligible_location and not re.search(
+                    r"\b(india|worldwide|anywhere|global)\b", blob, re.I
+                ):
                     continue
         restriction_text = f"{job.title} {job.location} {job.description[:800]}"
         if restricted_remote.search(restriction_text):

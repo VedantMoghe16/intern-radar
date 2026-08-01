@@ -69,3 +69,16 @@ def test_strict_internship_mode_excludes_trainees_and_working_students() -> None
     assert filter_jobs([_job("Graduate Apprentice Trainee")], profile) == []
     assert filter_jobs([_job("Working Student, Product")], profile) == []
     assert filter_jobs([_job("Product Management Intern")], profile)
+
+
+def test_explicit_remote_country_wins_over_incidental_global_word() -> None:
+    job = _job("Research Intern", "Remote, USA")
+    job.description = "Join a global research team."
+    profile = {
+        "locations": ["india", "remote"],
+        "require_intern_signal": True,
+        "strict_internships_only": True,
+        "allow_ambiguous_remote": False,
+    }
+
+    assert filter_jobs([job], profile) == []
